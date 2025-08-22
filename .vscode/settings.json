@@ -1,0 +1,12 @@
+{
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "python.formatting.autopep8Path": "autopep8",
+    "python.formatting.provider": "autopep8",
+    "editor.formatOnSave": true,
+    "files.autoSave": "afterDelay",
+    "files.encoding": "utf8",
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.python"  // 使用正确的扩展标识符
+    }
+}

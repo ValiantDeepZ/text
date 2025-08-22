@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>供应商管理 - 合同管理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">合同管理系统</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">合同列表</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/suppliers">供应商管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/clients">客户管理</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <h1 class="my-4">供应商管理</h1>
+
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>供应商列表</h5>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#supplierModal">
+                    <i class="fas fa-plus me-1"></i>添加供应商
+                </button>
+            </div>
+            <div class="card-body">
+                <table class="table table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>供应商名称</th>
+                            <th>联系信息</th>
+                            <th>创建日期</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for supplier in suppliers %}
+                        <tr>
+                            <td>{{ supplier.SupplierID }}</td>
+                            <td>{{ supplier.SupplierName }}</td>
+                            <td>{{ supplier.ContactInfo }}</td>
+                            <td>{{ supplier.CreatedDate.strftime('%Y-%m-%d') if supplier.CreatedDate else '' }}</td>
+                            <td>
+                                <!-- 使用数据属性存储供应商信息，避免直接在onclick中嵌入模板变量 -->
+                                <button class="btn btn-sm btn-info edit-btn"
+                                        data-id="{{ supplier.SupplierID }}"
+                                        data-name="{{ supplier.SupplierName }}"
+                                        data-contact="{{ supplier.ContactInfo }}">
+                                    <i class="fas fa-edit me-1"></i>编辑
+                                </button>
+                                <button class="btn btn-sm btn-danger delete-btn"
+                                        data-id="{{ supplier.SupplierID }}">
+                                    <i class="fas fa-trash me-1"></i>删除
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加供应商模态框 -->
+    <div class="modal fade" id="supplierModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加供应商</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="supplierForm">
+                        <div class="mb-3">
+                            <label class="form-label">供应商名称</label>
+                            <input type="text" class="form-control" name="SupplierName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">联系信息</label>
+                            <textarea class="form-control" name="ContactInfo" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>取消
+                    </button>
+                    <button type="button" class="btn btn-primary" id="saveSupplier">
+                        <i class="fas fa-save me-1"></i>保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑供应商模态框 -->
+    <div class="modal fade" id="editSupplierModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">编辑供应商</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editSupplierForm">
+                        <input type="hidden" id="editSupplierID">
+                        <div class="mb-3">
+                            <label class="form-label">供应商名称</label>
+                            <input type="text" class="form-control" id="editSupplierName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">联系信息</label>
+                            <textarea class="form-control" id="editContactInfo" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>取消
+                    </button>
+                    <button type="button" class="btn btn-primary" id="updateSupplier">
+                        <i class="fas fa-sync-alt me-1"></i>更新
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function () {
+            // 保存供应商
+            $('#saveSupplier').click(function () {
+                const formData = {
+                    SupplierName: $('input[name="SupplierName"]').val(),
+                    ContactInfo: $('textarea[name="ContactInfo"]').val()
+                };
+
+                $.ajax({
+                    url: '/api/suppliers',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(formData),
+                    success: function (response) {
+                        $('#supplierModal').modal('hide');
+                        $('#supplierForm')[0].reset();
+                        showAlert('供应商添加成功！', 'success');
+                        setTimeout(function() {
+                            location.reload();
+                        }, 1500);
+                    },
+                    error: function (xhr) {
+                        showAlert('保存失败: ' + xhr.responseText, 'danger');
+                    }
+                });
+            });
+
+            // 更新供应商
+            $('#updateSupplier').click(function () {
+                const supplierID = $('#editSupplierID').val();
+                const formData = {
+                    SupplierName: $('#editSupplierName').val(),
+                    ContactInfo: $('#editContactInfo').val()
+                };
+
+                $.ajax({
+                    url: `/api/suppliers/${supplierID}`,
+                    method: 'PUT',
+                    contentType: 'application/json',
+                    data: JSON.stringify(formData),
+                    success: function (response) {
+                        $('#editSupplierModal').modal('hide');
+                        showAlert('供应商更新成功！', 'success');
+                        setTimeout(function() {
+                            location.reload();
+                        }, 1500);
+                    },
+                    error: function (xhr) {
+                        showAlert('更新失败: ' + xhr.responseText, 'danger');
+                    }
+                });
+            });
+
+            // 编辑按钮点击事件
+            $('.edit-btn').click(function() {
+                const supplierID = $(this).data('id');
+                const supplierName = $(this).data('name');
+                const contactInfo = $(this).data('contact');
+                
+                $('#editSupplierID').val(supplierID);
+                $('#editSupplierName').val(supplierName);
+                $('#editContactInfo').val(contactInfo);
+                $('#editSupplierModal').modal('show');
+            });
+
+            // 删除按钮点击事件
+            $('.delete-btn').click(function() {
+                const supplierID = $(this).data('id');
+                
+                if (confirm('确定要删除这个供应商吗？')) {
+                    $.ajax({
+                        url: `/api/suppliers/${supplierID}`,
+                        method: 'DELETE',
+                        success: function (response) {
+                            showAlert('供应商删除成功！', 'success');
+                            setTimeout(function() {
+                                location.reload();
+                            }, 1500);
+                        },
+                        error: function (xhr) {
+                            showAlert('删除失败: ' + xhr.responseText, 'danger');
+                        }
+                    });
+                }
+            });
+
+            // 显示提示消息
+            function showAlert(message, type) {
+                // 移除现有的提示框
+                $('.alert-dismissible').remove();
+                
+                // 创建新的提示框
+                const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+                const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+                
+                const alertHtml = `
+                    <div class="alert ${alertClass} alert-dismissible fade show position-fixed" 
+                         style="top: 20px; right: 20px; z-index: 1050; min-width: 300px;" role="alert">
+                        <i class="fas ${icon} me-2"></i>
+                        <strong>${message}</strong>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                `;
+                
+                // 添加到页面
+                $('body').append(alertHtml);
+                
+                // 5秒后自动消失
+                setTimeout(function() {
+                    $('.alert-dismissible').alert('close');
+                }, 5000);
+            }
+        });
+    </script>
+</body>
+
+</html>
+    
