@@ -62,31 +62,34 @@ def init_routes(app):
     @app.route('/api/contracts', methods=['GET', 'POST'])
     def contracts():
         if request.method == 'GET':
-            contracts = Contract.query.all()
-            result = []
-            
+            #contracts = Contract.query.all()
+            #result = []
+            contracts = Contract.query.options(
+                joinedload(Contract.suppliers),
+                joinedload(Contract.client)
+            ).all()
+            contract_data = []    
+
             for contract in contracts:
                 total_payments = sum([p.Amount for p in contract.payments]) if contract.payments else 0
                 total_invoices = sum([i.Amount for i in contract.invoices]) if contract.invoices else 0
                 total_costs = sum([c.Amount for c in contract.costs]) if contract.costs else 0
                 
-                result.append({
+                contract_data.append({
                     'ContractID': contract.ContractID,
                     'ProjectName': contract.ProjectName,
                     'ContractNumber': contract.ContractNumber,
                     'TotalAmount': float(contract.TotalAmount),
                     'Supplier': ', '.join([s.SupplierName for s in contract.suppliers]) if contract.suppliers else '',
                     'Client': contract.client.ClientName if contract.client else '',
-                    'ClientID': contract.ClientID,  # 添加客户ID
-                    'SignDate': contract.SignDate.isoformat() if contract.SignDate else None,
                     'TotalPayments': float(total_payments),
                     'TotalInvoices': float(total_invoices),
                     'TotalCosts': float(total_costs),
-                    'RemainingAmount': float(contract.TotalAmount) - float(total_payments),
-                    'IsOverBudget': total_costs > contract.TotalAmount
+                    'IsOverBudget': total_costs > contract.TotalAmount,
+                    'SignDate': contract.SignDate.isoformat() if contract.SignDate else None
                 })
-            
-            return jsonify(result)
+        
+            return jsonify(contract_data)
         
         elif request.method == 'POST':
             data = request.json
@@ -109,17 +112,22 @@ def init_routes(app):
             
             # 供应商处理
             if data.get('Supplier'):
-                supplier = Supplier.query.filter_by(SupplierName=data['Supplier']).first()
+                supplier_names = [name.strip() for name in data['Supplier'].split(',') if name.strip()]
+            for supplier_name in supplier_names:
+                supplier = Supplier.query.filter_by(SupplierName=supplier_name).first()
                 if not supplier:
-                    return jsonify({'error': f'供应商"{data["Supplier"]}"不存在'}), 400
+                    # 如果供应商不存在，自动创建
+                    supplier = Supplier(SupplierName=supplier_name)
+                    db.session.add(supplier)
+                    db.session.flush()  # 获取新供应商的ID
                 new_contract.suppliers.append(supplier)
-            
+        
             db.session.add(new_contract)
             db.session.commit()
-            
+        
             return jsonify({
-                'message': '合同创建成功', 
-                'id': new_contract.ContractID
+            'message': '合同创建成功', 
+            'id': new_contract.ContractID
             })
     
     # 合同编辑
@@ -127,6 +135,7 @@ def init_routes(app):
     def edit_contract(contract_id):
         contract = Contract.query.get_or_404(contract_id)
         data = request.json
+
         
         # 客户处理
         if data.get('Client'):
@@ -134,23 +143,31 @@ def init_routes(app):
             if not client:
                 return jsonify({'error': f'客户"{data["Client"]}"不存在'}), 400
             contract.ClientID = client.ClientID
+        else:
+            contract.ClientID = None
         
         # 供应商处理
-        if data.get('Supplier'):
+        if 'Supplier' in data:
             contract.suppliers = []  # 清空现有关联
-            supplier = Supplier.query.filter_by(SupplierName=data['Supplier']).first()
-            if not supplier:
-                return jsonify({'error': f'供应商"{data["Supplier"]}"不存在'}), 400
-            contract.suppliers.append(supplier)  # 仅在supplier存在时执行
+        if data['Supplier']:
+            supplier_names = [name.strip() for name in data['Supplier'].split(',') if name.strip()]
+            for supplier_name in supplier_names:
+                supplier = Supplier.query.filter_by(SupplierName=supplier_name).first()
+                if not supplier:
+                    # 如果供应商不存在，自动创建
+                    supplier = Supplier(SupplierName=supplier_name)
+                    db.session.add(supplier)
+                    db.session.flush()  # 获取新供应商的ID
+                contract.suppliers.append(supplier)
         
         # 更新基本信息
         contract.ProjectName = data.get('ProjectName', contract.ProjectName)
         contract.ContractNumber = data.get('ContractNumber', contract.ContractNumber)
         contract.TotalAmount = data.get('TotalAmount', contract.TotalAmount)
         contract.SignDate = data.get('SignDate', contract.SignDate)
-        
+    
         db.session.commit()
-        
+    
         return jsonify({'message': '合同更新成功'})
     
     # 合同删除
@@ -321,6 +338,25 @@ def init_routes(app):
         db.session.delete(cost)
         db.session.commit()
         return jsonify({'message': '成本记录删除成功'})
+    
+    # 更新成本记录
+    @app.route('/api/costs/<int:cost_id>', methods=['PUT'])
+    def update_cost(cost_id):
+        cost = Cost.query.get_or_404(cost_id)
+        data = request.json
+
+        if 'CostDate' in data:
+            cost.CostDate = data['CostDate']
+        if 'CostType' in data:
+            cost.CostType = data['CostType']
+        if 'Amount' in data:
+            cost.Amount = data['Amount']
+        if 'Description' in data:
+            cost.Description = data['Description']
+    
+        db.session.commit()
+    
+        return jsonify({'message': '成本记录更新成功'})
     
     # 客户合同查询接口
     @app.route('/api/clients/<int:client_id>/contracts')
