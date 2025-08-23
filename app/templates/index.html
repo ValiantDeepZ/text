@@ -279,6 +279,42 @@
         .progress-bar.invoice-progress {
             background-color: var(--warning-color);
         }
+
+        /* 新增样式 */
+        .completion-badge {
+            font-size: 0.85rem;
+            padding: 5px 8px;
+            border-radius: 10px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .status-active {
+            background-color: var(--success-color);
+        }
+        
+        .status-warning {
+            background-color: var(--warning-color);
+        }
+        
+        .status-danger {
+            background-color: var(--danger-color);
+        }
+        
+        .search-container {
+            margin-bottom: 20px;
+        }
+        
+        .filter-buttons .btn {
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
     </style>
 </head>
 
@@ -313,6 +349,11 @@
                             <i class="fas fa-money-bill-wave me-1"></i>成本管理
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/fixed_costs">
+                            <i class="fas fa-calculator me-1"></i>固定成本
+                        </a>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -322,6 +363,33 @@
         <h1 class="mb-4">
             <i class="fas fa-file-contract me-2"></i>合同管理系统
         </h1>
+
+        <!-- 搜索和筛选区域 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-filter me-2"></i>搜索与筛选</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="input-group">
+                            <input type="text" class="form-control" placeholder="搜索项目名称、合同编号..." id="searchInput">
+                            <button class="btn btn-primary" type="button" id="searchButton">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="filter-buttons">
+                            <button class="btn btn-outline-primary active" data-filter="all">全部</button>
+                            <button class="btn btn-outline-danger" data-filter="overbudget">超预算</button>
+                            <button class="btn btn-outline-success" data-filter="normal">正常</button>
+                            <button class="btn btn-outline-warning" data-filter="highvalue">高价值合同</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- 统计信息 -->
         <div class="stats-grid">
@@ -366,7 +434,7 @@
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover">
+                    <table class="table table-striped table-hover" id="contractsTable">
                         <thead class="table-dark">
                             <tr>
                                 <th>项目名称</th>
@@ -376,6 +444,7 @@
                                 <th>客户</th>
                                 <th>已付款</th>
                                 <th>总成本</th>
+                                <th>完工率</th>
                                 <th>付款进度</th>
                                 <th>发票进度</th>
                                 <th>状态</th>
@@ -384,7 +453,7 @@
                         </thead>
                         <tbody>
                             {% for contract in contracts %}
-                            <tr class="{% if contract.IsOverBudget %}table-danger{% endif %}">
+                            <tr class="{% if contract.IsOverBudget %}table-danger{% endif %}" data-amount="{{ contract.TotalAmount }}">
                                 <td>{{ contract.ProjectName }}</td>
                                 <td>{{ contract.ContractNumber }}</td>
                                 <td>¥{{ "%.2f"|format(contract.TotalAmount) }}</td>
@@ -393,6 +462,11 @@
                                 <td>¥{{ "%.2f"|format(contract.TotalPayments) }}</td>
                                 <td class="{% if contract.IsOverBudget %}over-budget{% endif %}">
                                     ¥{{ "%.2f"|format(contract.TotalCosts) }}
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary completion-badge">
+                                        {{ "%.1f"|format(contract.CompletionRate) }}%
+                                    </span>
                                 </td>
                                 <td>
                                     <div class="progress">
@@ -418,9 +492,9 @@
                                 </td>
                                 <td>
                                     {% if contract.IsOverBudget %}
-                                    <span class="badge bg-danger">超预算</span>
+                                    <span class="badge bg-danger"><i class="fas fa-exclamation-circle me-1"></i>超预算</span>
                                     {% else %}
-                                    <span class="badge bg-success">正常</span>
+                                    <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>正常</span>
                                     {% endif %}
                                 </td>
                                 <td class="action-buttons">
@@ -443,7 +517,8 @@
                                         data-totalamount="{{ contract.TotalAmount }}"
                                         data-signdate="{{ contract.SignDate }}"
                                         data-supplier="{{ contract.Supplier }}"
-                                        data-client="{{ contract.Client }}">
+                                        data-client="{{ contract.Client }}"
+                                        data-completionrate="{{ contract.CompletionRate }}">
                                         <i class="fas fa-edit"></i>
                                     </button>
                                     <button class="btn btn-sm btn-dark delete-btn" title="删除合同"
@@ -499,6 +574,12 @@
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">客户</label>
                                 <input type="text" class="form-control" name="Client" placeholder="输入客户名称">
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">完工率 (%)</label>
+                                <input type="number" step="0.01" min="0" max="100" class="form-control" name="CompletionRate" value="0">
                             </div>
                         </div>
                     </form>
@@ -560,6 +641,12 @@
                                 <input type="text" class="form-control" name="Client" id="editClient" placeholder="输入客户名称">
                             </div>
                         </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">完工率 (%)</label>
+                                <input type="number" step="0.01" min="0" max="100" class="form-control" name="CompletionRate" id="editCompletionRate">
+                            </div>
+                        </div>
                     </form>
                 </div>
                 <div class="modal-footer">
@@ -578,28 +665,67 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         $(document).ready(function () {
-            // 修复进度条设置函数
+            // 初始化进度条
             function setProgressBarWidth() {
                 $('.payment-progress').each(function () {
-                    const width = $(this).data('width');
+                    const width = Math.min(Math.max($(this).data('width') || 0, 0), 100);
                     $(this).css('width', width + '%');
                     $(this).text(width.toFixed(1) + '%');
                 });
 
                 $('.invoice-progress').each(function () {
-                    const width = $(this).data('width');
+                    const width = Math.min(Math.max($(this).data('width') || 0, 0), 100);
                     $(this).css('width', width + '%');
                     $(this).text(width.toFixed(1) + '%');
                 });
             }
 
-            // 确保在页面加载时调用
-            $(document).ready(function () {
+            // 初始化函数
+            function init() {
                 setProgressBarWidth();
-                // 其他初始化代码...
-            });
+                
+                // 搜索功能
+                $('#searchButton').on('click', function() {
+                    const searchText = $('#searchInput').val().toLowerCase();
+                    $('#contractsTable tbody tr').each(function() {
+                        const projectName = $(this).find('td:eq(0)').text().toLowerCase();
+                        const contractNumber = $(this).find('td:eq(1)').text().toLowerCase();
+                        if (projectName.includes(searchText) || contractNumber.includes(searchText)) {
+                            $(this).show();
+                        } else {
+                            $(this).hide();
+                        }
+                    });
+                });
+                
+                // 筛选功能
+                $('.filter-buttons button').on('click', function() {
+                    $('.filter-buttons button').removeClass('active');
+                    $(this).addClass('active');
+                    
+                    const filter = $(this).data('filter');
+                    $('#contractsTable tbody tr').each(function() {
+                        let show = true;
+                        
+                        if (filter === 'overbudget') {
+                            show = $(this).hasClass('table-danger');
+                        } else if (filter === 'normal') {
+                            show = !$(this).hasClass('table-danger');
+                        } else if (filter === 'highvalue') {
+                            const amount = parseFloat($(this).data('amount')) || 0;
+                            show = amount > 100000; // 假设高价值合同为10万以上
+                        }
+                        
+                        if (show) {
+                            $(this).show();
+                        } else {
+                            $(this).hide();
+                        }
+                    });
+                });
+            }
 
-            // 修改保存合同的代码 (index.html 中 #saveContract 点击事件)
+            // 保存合同
             $('#saveContract').click(function () {
                 const formData = {
                     ProjectName: $('input[name="ProjectName"]').val().trim(),
@@ -607,10 +733,11 @@
                     TotalAmount: parseFloat($('input[name="TotalAmount"]').val()),
                     Supplier: $('input[name="Supplier"]').val().trim(),
                     Client: $('input[name="Client"]').val().trim(),
-                    SignDate: $('input[name="SignDate"]').val() || null
+                    SignDate: $('input[name="SignDate"]').val() || null,
+                    CompletionRate: parseFloat($('input[name="CompletionRate"]').val()) || 0
                 };
 
-                // 增强数据验证（移除了对供应商和客户的必填验证）
+                // 数据验证
                 if (!formData.ProjectName) {
                     showAlert('请输入项目名称', 'danger');
                     return;
@@ -652,7 +779,8 @@
                     TotalAmount: parseFloat($('#editTotalAmount').val()),
                     Supplier: $('#editSupplier').val(),
                     Client: $('#editClient').val(),
-                    SignDate: $('#editSignDate').val()
+                    SignDate: $('#editSignDate').val(),
+                    CompletionRate: parseFloat($('#editCompletionRate').val()) || 0
                 };
 
                 $.ajax({
@@ -662,9 +790,7 @@
                     data: JSON.stringify(formData),
                     success: function (response) {
                         $('#editContractModal').modal('hide');
-                        // 显示成功消息
                         showAlert('合同更新成功！', 'success');
-                        // 延迟一会儿再重新加载页面，让用户看到成功消息
                         setTimeout(function () {
                             location.reload();
                         }, 1500);
@@ -684,6 +810,7 @@
                 const signDate = $(this).data('signdate');
                 const supplier = $(this).data('supplier');
                 const client = $(this).data('client');
+                const completionRate = $(this).data('completionrate');
 
                 $('#editContractID').val(contractID);
                 $('#editProjectName').val(projectName);
@@ -692,6 +819,7 @@
                 $('#editSignDate').val(signDate);
                 $('#editSupplier').val(supplier);
                 $('#editClient').val(client);
+                $('#editCompletionRate').val(completionRate || 0);
 
                 $('#editContractModal').modal('show');
             });
@@ -705,9 +833,7 @@
                         url: '/api/contracts/' + contractID,
                         method: 'DELETE',
                         success: function (response) {
-                            // 显示成功消息
                             showAlert('合同删除成功！', 'success');
-                            // 延迟一会儿再重新加载页面，让用户看到成功消息
                             setTimeout(function () {
                                 location.reload();
                             }, 1500);
@@ -721,10 +847,8 @@
 
             // 显示提示消息
             function showAlert(message, type) {
-                // 移除现有的提示框
                 $('.alert-dismissible').remove();
 
-                // 创建新的提示框
                 const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
                 const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
 
@@ -737,37 +861,15 @@
                     </div>
                 `;
 
-                // 添加到页面
                 $('body').append(alertHtml);
 
-                // 5秒后自动消失
                 setTimeout(function () {
                     $('.alert-dismissible').alert('close');
                 }, 5000);
             }
             
-            // 修复进度条初始化逻辑 (index.html)
-            function setProgressBarWidth() {
-                // 处理付款进度条
-                $('.payment-progress').each(function () {
-                    const width = Math.min(Math.max($(this).data('width') || 0, 0), 100);
-                    $(this).css('width', width + '%');
-                    $(this).text(width.toFixed(1) + '%');
-                });
-
-                // 处理发票进度条（修复主要问题）
-                $('.invoice-progress').each(function () {
-                    const width = Math.min(Math.max($(this).data('width') || 0, 0), 100);
-                    $(this).css('width', width + '%');
-                    $(this).text(width.toFixed(1) + '%');
-                });
-            }
-
-            // 确保在DOM加载完成后执行
-            $(document).ready(function () {
-                setProgressBarWidth();
-                // 其他初始化代码...
-            });
+            // 初始化
+            init();
         });
     </script>
 </body>

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 from flask import render_template, request, jsonify, redirect, url_for
 from app import db
-from app.models import Supplier, Client, Contract, Payment, Invoice, Cost
+from app.models import Supplier, Client, Contract, Payment, Invoice, Cost, FixedCost  # 添加 FixedCost 导入
 import os
 from sqlalchemy.orm import joinedload
+from datetime import datetime
 
 
 def init_routes(app):
@@ -22,6 +23,9 @@ def init_routes(app):
             total_invoices = sum([i.Amount for i in contract.invoices]) if contract.invoices else 0
             total_costs = sum([c.Amount for c in contract.costs]) if contract.costs else 0
             
+            # 处理 CompletionRate 可能为 None 的情况
+            completion_rate = float(contract.CompletionRate) if contract.CompletionRate is not None else 0.0
+            
             contract_data.append({
                 'ContractID': contract.ContractID,
                 'ProjectName': contract.ProjectName,
@@ -33,7 +37,8 @@ def init_routes(app):
                 'TotalInvoices': float(total_invoices),
                 'TotalCosts': float(total_costs),
                 'IsOverBudget': total_costs > contract.TotalAmount,
-                'SignDate': contract.SignDate.isoformat() if contract.SignDate else None
+                'SignDate': contract.SignDate.isoformat() if contract.SignDate else None,
+                'CompletionRate': completion_rate  # 添加完工率
             })
         
         return render_template('index.html', contracts=contract_data)
@@ -62,34 +67,35 @@ def init_routes(app):
     @app.route('/api/contracts', methods=['GET', 'POST'])
     def contracts():
         if request.method == 'GET':
-            #contracts = Contract.query.all()
-            #result = []
-            contracts = Contract.query.options(
-                joinedload(Contract.suppliers),
-                joinedload(Contract.client)
-            ).all()
-            contract_data = []    
-
+            contracts = Contract.query.all()
+            result = []
+            
             for contract in contracts:
                 total_payments = sum([p.Amount for p in contract.payments]) if contract.payments else 0
                 total_invoices = sum([i.Amount for i in contract.invoices]) if contract.invoices else 0
                 total_costs = sum([c.Amount for c in contract.costs]) if contract.costs else 0
                 
-                contract_data.append({
+                # 处理 CompletionRate 可能为 None 的情况
+                completion_rate = float(contract.CompletionRate) if contract.CompletionRate is not None else 0.0
+                
+                result.append({
                     'ContractID': contract.ContractID,
                     'ProjectName': contract.ProjectName,
                     'ContractNumber': contract.ContractNumber,
                     'TotalAmount': float(contract.TotalAmount),
                     'Supplier': ', '.join([s.SupplierName for s in contract.suppliers]) if contract.suppliers else '',
                     'Client': contract.client.ClientName if contract.client else '',
+                    'ClientID': contract.ClientID,  # 添加客户ID
+                    'SignDate': contract.SignDate.isoformat() if contract.SignDate else None,
+                    'CompletionRate': completion_rate,  # 添加完工率
                     'TotalPayments': float(total_payments),
                     'TotalInvoices': float(total_invoices),
                     'TotalCosts': float(total_costs),
-                    'IsOverBudget': total_costs > contract.TotalAmount,
-                    'SignDate': contract.SignDate.isoformat() if contract.SignDate else None
+                    'RemainingAmount': float(contract.TotalAmount) - float(total_payments),
+                    'IsOverBudget': total_costs > contract.TotalAmount
                 })
-        
-            return jsonify(contract_data)
+            
+            return jsonify(result)
         
         elif request.method == 'POST':
             data = request.json
@@ -107,35 +113,30 @@ def init_routes(app):
                 ContractNumber=data['ContractNumber'],
                 TotalAmount=data['TotalAmount'],
                 ClientID=client.ClientID if client else None,
-                SignDate=data.get('SignDate')
+                SignDate=data.get('SignDate'),
+                CompletionRate=data.get('CompletionRate', 0)  # 新增完工率字段
             )
             
             # 供应商处理
             if data.get('Supplier'):
-                supplier_names = [name.strip() for name in data['Supplier'].split(',') if name.strip()]
-            for supplier_name in supplier_names:
-                supplier = Supplier.query.filter_by(SupplierName=supplier_name).first()
+                supplier = Supplier.query.filter_by(SupplierName=data['Supplier']).first()
                 if not supplier:
-                    # 如果供应商不存在，自动创建
-                    supplier = Supplier(SupplierName=supplier_name)
-                    db.session.add(supplier)
-                    db.session.flush()  # 获取新供应商的ID
+                    return jsonify({'error': f'供应商"{data["Supplier"]}"不存在'}), 400
                 new_contract.suppliers.append(supplier)
-        
+            
             db.session.add(new_contract)
             db.session.commit()
-        
+            
             return jsonify({
-            'message': '合同创建成功', 
-            'id': new_contract.ContractID
+                'message': '合同创建成功', 
+                'id': new_contract.ContractID
             })
     
-    # 合同编辑
+    # 合同编辑 - 重命名为 update_contract 以避免冲突
     @app.route('/api/contracts/<int:contract_id>', methods=['PUT'])
-    def edit_contract(contract_id):
+    def update_contract(contract_id):
         contract = Contract.query.get_or_404(contract_id)
         data = request.json
-
         
         # 客户处理
         if data.get('Client'):
@@ -143,31 +144,24 @@ def init_routes(app):
             if not client:
                 return jsonify({'error': f'客户"{data["Client"]}"不存在'}), 400
             contract.ClientID = client.ClientID
-        else:
-            contract.ClientID = None
         
         # 供应商处理
-        if 'Supplier' in data:
+        if data.get('Supplier'):
             contract.suppliers = []  # 清空现有关联
-        if data['Supplier']:
-            supplier_names = [name.strip() for name in data['Supplier'].split(',') if name.strip()]
-            for supplier_name in supplier_names:
-                supplier = Supplier.query.filter_by(SupplierName=supplier_name).first()
-                if not supplier:
-                    # 如果供应商不存在，自动创建
-                    supplier = Supplier(SupplierName=supplier_name)
-                    db.session.add(supplier)
-                    db.session.flush()  # 获取新供应商的ID
-                contract.suppliers.append(supplier)
+            supplier = Supplier.query.filter_by(SupplierName=data['Supplier']).first()
+            if not supplier:
+                return jsonify({'error': f'供应商"{data["Supplier"]}"不存在'}), 400
+            contract.suppliers.append(supplier)  # 仅在supplier存在时执行
         
-        # 更新基本信息
+        # 更新基本信息，包括完工率
         contract.ProjectName = data.get('ProjectName', contract.ProjectName)
         contract.ContractNumber = data.get('ContractNumber', contract.ContractNumber)
         contract.TotalAmount = data.get('TotalAmount', contract.TotalAmount)
         contract.SignDate = data.get('SignDate', contract.SignDate)
-    
+        contract.CompletionRate = data.get('CompletionRate', contract.CompletionRate or 0)  # 新增完工率字段
+        
         db.session.commit()
-    
+        
         return jsonify({'message': '合同更新成功'})
     
     # 合同删除
@@ -210,7 +204,7 @@ def init_routes(app):
         return jsonify({'message': '供应商删除成功'})
     
     @app.route('/api/suppliers/<int:supplier_id>', methods=['PUT'])
-    def edit_supplier(supplier_id):
+    def update_supplier(supplier_id):
         supplier = Supplier.query.get_or_404(supplier_id)
         data = request.json
         supplier.SupplierName = data.get('SupplierName', supplier.SupplierName)
@@ -243,7 +237,7 @@ def init_routes(app):
         return jsonify({'message': '客户删除成功'})
     
     @app.route('/api/clients/<int:client_id>', methods=['PUT'])
-    def edit_client(client_id):
+    def update_client(client_id):
         client = Client.query.get_or_404(client_id)
         data = request.json
         client.ClientName = data.get('ClientName', client.ClientName)
@@ -260,6 +254,11 @@ def init_routes(app):
                          contract=None, 
                          total_costs=0, 
                          is_over_budget=False)
+    
+    # 固定成本页面
+    @app.route('/fixed_costs')
+    def fixed_costs():
+        return render_template('fixed_costs.html')
     
     # 合同付款页面
     @app.route('/contract/<int:contract_id>/payments')
@@ -339,25 +338,6 @@ def init_routes(app):
         db.session.commit()
         return jsonify({'message': '成本记录删除成功'})
     
-    # 更新成本记录
-    @app.route('/api/costs/<int:cost_id>', methods=['PUT'])
-    def update_cost(cost_id):
-        cost = Cost.query.get_or_404(cost_id)
-        data = request.json
-
-        if 'CostDate' in data:
-            cost.CostDate = data['CostDate']
-        if 'CostType' in data:
-            cost.CostType = data['CostType']
-        if 'Amount' in data:
-            cost.Amount = data['Amount']
-        if 'Description' in data:
-            cost.Description = data['Description']
-    
-        db.session.commit()
-    
-        return jsonify({'message': '成本记录更新成功'})
-    
     # 客户合同查询接口
     @app.route('/api/clients/<int:client_id>/contracts')
     def client_contracts(client_id):
@@ -368,6 +348,9 @@ def init_routes(app):
             total_payments = sum([p.Amount for p in contract.payments]) if contract.payments else 0
             total_invoices = sum([i.Amount for i in contract.invoices]) if contract.invoices else 0
             
+            # 处理 CompletionRate 可能为 None 的情况
+            completion_rate = float(contract.CompletionRate) if contract.CompletionRate is not None else 0.0
+            
             result.append({
                 'ContractID': contract.ContractID,
                 'ProjectName': contract.ProjectName,
@@ -377,7 +360,8 @@ def init_routes(app):
                 'TotalInvoices': float(total_invoices),
                 'RemainingPayment': float(contract.TotalAmount) - float(total_payments),
                 'RemainingInvoice': float(contract.TotalAmount) - float(total_invoices),
-                'SignDate': contract.SignDate.isoformat() if contract.SignDate else None
+                'SignDate': contract.SignDate.isoformat() if contract.SignDate else None,
+                'CompletionRate': completion_rate  # 添加完工率
             })
         
         return jsonify(result)
@@ -394,6 +378,9 @@ def init_routes(app):
             total_payments = sum([p.Amount for p in contract.payments]) if contract.payments else 0
             total_invoices = sum([i.Amount for i in contract.invoices]) if contract.invoices else 0
             
+            # 处理 CompletionRate 可能为 None 的情况
+            completion_rate = float(contract.CompletionRate) if contract.CompletionRate is not None else 0.0
+            
             result.append({
                 'ContractID': contract.ContractID,
                 'ProjectName': contract.ProjectName,
@@ -401,10 +388,131 @@ def init_routes(app):
                 'TotalAmount': float(contract.TotalAmount),
                 'TotalPayments': float(total_payments),
                 'TotalInvoices': float(total_invoices),
-                'SignDate': contract.SignDate.isoformat() if contract.SignDate else None
+                'SignDate': contract.SignDate.isoformat() if contract.SignDate else None,
+                'CompletionRate': completion_rate  # 添加完工率
             })
         
         return jsonify(result)
+    
+    # 获取工资薪金记录API
+    @app.route('/api/salary_costs', methods=['GET'])
+    def get_salary_costs():
+        salary_costs = FixedCost.query.filter_by(CostType="工资薪金").all()
+        result = []
+        
+        for cost in salary_costs:
+            result.append({
+                'FixedCostID': cost.FixedCostID,
+                'Month': cost.Month,
+                'Amount': float(cost.Amount),
+                'Description': cost.Description,
+                'CostDate': cost.CostDate.isoformat() if cost.CostDate else None
+            })
+        
+        return jsonify(result)
+    
+    # 添加工资薪金记录API
+    @app.route('/api/salary_costs', methods=['POST'])
+    def add_salary_cost():
+        data = request.json
+        new_salary_cost = FixedCost(
+            CostType="工资薪金",
+            Amount=data['Amount'],
+            CostDate=data.get('CostDate', datetime.utcnow().date()),
+            Description=data.get('Description', ''),
+            Month=data['Month']  # 格式: YYYY-MM
+        )
+        db.session.add(new_salary_cost)
+        db.session.commit()
+        return jsonify({'message': '工资薪金记录添加成功', 'id': new_salary_cost.FixedCostID})
+    
+    # 删除工资薪金记录API
+    @app.route('/api/salary_costs/<int:id>', methods=['DELETE'])
+    def delete_salary_cost(id):
+        salary_cost = FixedCost.query.get_or_404(id)
+        db.session.delete(salary_cost)
+        db.session.commit()
+        return jsonify({'message': '工资薪金记录删除成功'})
+    
+    # 固定成本分摊计算API
+    @app.route('/api/allocate_fixed_costs', methods=['POST'])
+    def allocate_fixed_costs():
+        data = request.json
+        month = data['month']  # 格式: YYYY-MM
+        fixed_cost_type = data.get('cost_type', '工资薪金')
+        
+        # 获取当月固定成本总额
+        fixed_costs = FixedCost.query.filter(
+            FixedCost.Month == month,
+            FixedCost.CostType == fixed_cost_type
+        ).all()
+        
+        total_fixed_cost = sum([fc.Amount for fc in fixed_costs]) if fixed_costs else 0
+        
+        if total_fixed_cost == 0:
+            return jsonify({'error': f'当月没有{fixed_cost_type}记录'}), 400
+        
+        # 获取所有合同及其完工率
+        contracts = Contract.query.filter(Contract.CompletionRate > 0).all()
+        
+        if not contracts:
+            return jsonify({'error': '没有找到有完工率的合同'}), 400
+        
+        # 计算权重和总权重
+        weights = []
+        total_weight = 0
+        
+        for contract in contracts:
+            # 处理 CompletionRate 可能为 None 的情况
+            completion_rate = float(contract.CompletionRate) if contract.CompletionRate is not None else 0.0
+            weight = float(contract.TotalAmount) * completion_rate / 100
+            weights.append({
+                'contract_id': contract.ContractID,
+                'contract_name': contract.ProjectName,
+                'amount': float(contract.TotalAmount),
+                'completion_rate': completion_rate,
+                'weight': weight
+            })
+            total_weight += weight
+        
+        if total_weight == 0:
+            return jsonify({'error': '总权重为0，无法分摊成本'}), 400
+        
+        # 计算分配率
+        allocation_rate = total_fixed_cost / total_weight
+        
+        # 分配成本并保存到数据库
+        results = []
+        for weight_info in weights:
+            allocated_cost = allocation_rate * weight_info['weight']
+            
+            # 创建成本记录
+            new_cost = Cost(
+                ContractID=weight_info['contract_id'],
+                CostType=f"固定成本分摊-{fixed_cost_type}",
+                Amount=allocated_cost,
+                CostDate=datetime.strptime(month + '-01', '%Y-%m-%d').date(),
+                Description=f"{month}月份{fixed_cost_type}分摊"
+            )
+            db.session.add(new_cost)
+            
+            results.append({
+                'contract_id': weight_info['contract_id'],
+                'contract_name': weight_info['contract_name'],
+                'amount': weight_info['amount'],
+                'completion_rate': weight_info['completion_rate'],
+                'weight': weight_info['weight'],
+                'allocated_cost': allocated_cost
+            })
+        
+        db.session.commit()
+        
+        return jsonify({
+            'total_fixed_cost': total_fixed_cost,
+            'total_weight': total_weight,
+            'allocation_rate': allocation_rate,
+            'results': results
+        })
     
     # 测试路由
     @app.route('/test')

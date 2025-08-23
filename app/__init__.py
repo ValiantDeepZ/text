@@ -5,6 +5,7 @@ from config import Config
 import os
 import sys
 import codecs
+from sqlalchemy import text
 
 # 强制使用 UTF-8 编码
 if sys.stdout.encoding != 'UTF-8':
@@ -58,7 +59,6 @@ def create_app(config_class=Config):
     with app.app_context():
         try:
             # 尝试执行一个简单的查询来测试连接
-            from sqlalchemy import text
             result = db.session.execute(text('SELECT 1'))
             print("数据库连接测试成功")
         except Exception as e:
@@ -68,10 +68,62 @@ def create_app(config_class=Config):
     from app.routes import init_routes
     init_routes(app)
     
-    # 创建数据库表
+    # 创建数据库表和执行迁移
     with app.app_context():
-        db.create_all()
-        print("数据库表已创建或确认存在")
+        try:
+            # 检查并应用数据库迁移
+            print("检查数据库迁移...")
+            
+            # 检查 Contracts 表是否有 CompletionRate 字段
+            try:
+                result = db.session.execute(text("""
+                    SELECT COLUMN_NAME 
+                    FROM INFORMATION_SCHEMA.COLUMNS 
+                    WHERE TABLE_NAME = 'Contracts' AND COLUMN_NAME = 'CompletionRate'
+                """))
+                if not result.fetchone():
+                    # 添加 CompletionRate 字段
+                    db.session.execute(text("ALTER TABLE Contracts ADD CompletionRate DECIMAL(5,2) DEFAULT 0.00"))
+                    print("Added CompletionRate column to Contracts table")
+            except Exception as e:
+                print(f"Error checking/adding CompletionRate column: {e}")
+                db.session.rollback()
+            
+            # 检查 FixedCosts 表是否存在
+            try:
+                result = db.session.execute(text("""
+                    SELECT COUNT(*) 
+                    FROM INFORMATION_SCHEMA.TABLES 
+                    WHERE TABLE_NAME = 'FixedCosts'
+                """))
+                if result.scalar() == 0:
+                    # 创建 FixedCosts 表
+                    db.session.execute(text("""
+                        CREATE TABLE FixedCosts (
+                            FixedCostID INT IDENTITY(1,1) PRIMARY KEY,
+                            CostType NVARCHAR(100) NOT NULL,
+                            Amount DECIMAL(18,2) NOT NULL,
+                            CostDate DATE,
+                            Description NVARCHAR(500),
+                            Month NVARCHAR(7) NOT NULL,
+                            CreatedDate DATETIME DEFAULT GETDATE()
+                        )
+                    """))
+                    print("Created FixedCosts table")
+            except Exception as e:
+                print(f"Error checking/creating FixedCosts table: {e}")
+                db.session.rollback()
+            
+            # 提交所有更改
+            db.session.commit()
+            print("数据库迁移完成")
+            
+            # 创建其他表（如果不存在）
+            db.create_all()
+            print("数据库表已创建或确认存在")
+            
+        except Exception as e:
+            print(f"数据库迁移过程中出现错误: {str(e)}")
+            db.session.rollback()
     
     return app
-    

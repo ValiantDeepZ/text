@@ -36,6 +36,7 @@ class Contract(db.Model):
     TotalAmount = db.Column(db.Numeric(18,2), nullable=False)
     ClientID = db.Column(db.Integer, db.ForeignKey('Clients.ClientID'))  # 关联Clients表
     SignDate = db.Column(db.Date)
+    CompletionRate = db.Column(db.Numeric(5,2), default=0.00)  # 新增完工率字段，百分比格式
     CreatedDate = db.Column(db.DateTime, default=datetime.utcnow)
     
     # 多对多关系：一个合同对应多个供应商
@@ -96,3 +97,17 @@ class Cost(db.Model):
     
     def __repr__(self):
         return f'<Cost {self.CostID} for Contract {self.ContractID}>'
+    
+# 添加FixedCost模型
+class FixedCost(db.Model):
+    __tablename__ = 'FixedCosts'
+    FixedCostID = db.Column(db.Integer, primary_key=True)
+    CostType = db.Column(db.String(100), nullable=False)  # 成本类型，如"工资薪金"
+    Amount = db.Column(db.Numeric(18,2), nullable=False)
+    CostDate = db.Column(db.Date)
+    Description = db.Column(db.String(500))
+    Month = db.Column(db.String(7), nullable=False)  # 月份，格式: YYYY-MM
+    CreatedDate = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<FixedCost {self.CostType} {self.Month}>'

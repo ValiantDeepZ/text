@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>固定成本管理 - 合同管理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* 复用costs.html的样式 */
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2c3e50;
+            --success-color: #2ecc71;
+            --danger-color: #e74c3c;
+            --warning-color: #f39c12;
+            --light-bg: #f8f9fa;
+        }
+        
+        body {
+            background-color: #f5f7f9;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+        }
+        
+        .navbar-brand {
+            font-weight: bold;
+            color: var(--primary-color) !important;
+        }
+        
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border: none;
+            margin-bottom: 20px;
+        }
+        
+        .card-header {
+            background-color: var(--secondary-color);
+            color: white;
+            border-radius: 10px 10px 0 0 !important;
+            padding: 15px 20px;
+            font-weight: 600;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        
+        .page-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+        
+        .table th {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+        
+        .allocation-results {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-file-contract me-2"></i>合同管理系统
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">
+                            <i class="fas fa-list me-1"></i>合同列表
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/suppliers">
+                            <i class="fas fa-truck me-1"></i>供应商管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/clients">
+                            <i class="fas fa-users me-1"></i>客户管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/costs">
+                            <i class="fas fa-money-bill-wave me-1"></i>成本管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/fixed_costs">
+                            <i class="fas fa-calculator me-1"></i>固定成本
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="page-container mt-4">
+        <h1 class="mb-4">
+            <i class="fas fa-calculator me-2"></i>固定成本管理
+        </h1>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-money-bill-wave me-2"></i>工资薪金记录</h5>
+                        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#salaryModal">
+                            <i class="fas fa-plus me-1"></i>添加记录
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>月份</th>
+                                        <th>金额</th>
+                                        <th>描述</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="salaryCostsList">
+                                    <!-- 工资薪金记录将通过JS动态加载 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-calculator me-2"></i>固定成本分摊计算</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="allocationForm">
+                            <div class="mb-3">
+                                <label class="form-label">选择月份</label>
+                                <input type="month" class="form-control" id="allocationMonth" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">成本类型</label>
+                                <select class="form-control" id="costType" required>
+                                    <option value="工资薪金">工资薪金</option>
+                                    <!-- 可以添加其他固定成本类型 -->
+                                </select>
+                            </div>
+                            <button type="button" class="btn btn-primary w-100" id="calculateAllocation">
+                                <i class="fas fa-calculator me-1"></i>计算分摊
+                            </button>
+                        </form>
+
+                        <div class="allocation-results mt-4" id="allocationResults" style="display: none;">
+                            <h5><i class="fas fa-chart-pie me-2"></i>分摊结果</h5>
+                            <div class="mb-3">
+                                <strong>总固定成本: </strong><span id="totalFixedCost">¥0.00</span>
+                            </div>
+                            <div class="mb-3">
+                                <strong>总权重: </strong><span id="totalWeight">0</span>
+                            </div>
+                            <div class="mb-3">
+                                <strong>分配率: </strong><span id="allocationRate">¥0.00/单位权重</span>
+                            </div>
+                            
+                            <div class="table-responsive mt-3">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>合同名称</th>
+                                            <th>合同金额</th>
+                                            <th>完工率</th>
+                                            <th>权重</th>
+                                            <th>分摊成本</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="allocationDetails">
+                                        <!-- 分摊详情将通过JS动态加载 -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <button type="button" class="btn btn-success w-100 mt-3" id="confirmAllocation">
+                                <i class="fas fa-check me-1"></i>确认分摊
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加工资薪金记录模态框 -->
+    <div class="modal fade" id="salaryModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加工资薪金记录</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="salaryForm">
+                        <div class="mb-3">
+                            <label class="form-label">月份</label>
+                            <input type="month" class="form-control" name="Month" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">金额</label>
+                            <input type="number" step="0.01" class="form-control" name="Amount" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">描述</label>
+                            <textarea class="form-control" name="Description" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="saveSalary">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // 加载工资薪金记录
+            function loadSalaryCosts() {
+                $.ajax({
+                    url: '/api/salary_costs',
+                    method: 'GET',
+                    success: function(response) {
+                        const tbody = $('#salaryCostsList');
+                        tbody.empty();
+                        
+                        response.forEach(cost => {
+                            const row = `
+                                <tr>
+                                    <td>${cost.Month}</td>
+                                    <td>¥${cost.Amount.toFixed(2)}</td>
+                                    <td>${cost.Description || ''}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-danger delete-salary" data-id="${cost.FixedCostID}">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            `;
+                            tbody.append(row);
+                        });
+                        
+                        // 绑定删除事件
+                        $('.delete-salary').click(function() {
+                            const id = $(this).data('id');
+                            if (confirm('确定要删除这条记录吗？')) {
+                                $.ajax({
+                                    url: `/api/salary_costs/${id}`,
+                                    method: 'DELETE',
+                                    success: function() {
+                                        loadSalaryCosts();
+                                        showAlert('记录删除成功', 'success');
+                                    },
+                                    error: function(xhr) {
+                                        showAlert('删除失败: ' + xhr.responseText, 'danger');
+                                    }
+                                });
+                            }
+                        });
+                    },
+                    error: function(xhr) {
+                        console.error('加载工资薪金记录失败:', xhr.responseText);
+                    }
+                });
+            }
+            
+            // 保存工资薪金记录
+            $('#saveSalary').click(function() {
+                const formData = {
+                    Month: $('input[name="Month"]').val(),
+                    Amount: parseFloat($('input[name="Amount"]').val()),
+                    Description: $('textarea[name="Description"]').val(),
+                    CostDate: new Date().toISOString().split('T')[0]
+                };
+                
+                $.ajax({
+                    url: '/api/salary_costs',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(formData),
+                    success: function(response) {
+                        $('#salaryModal').modal('hide');
+                        $('#salaryForm')[0].reset();
+                        loadSalaryCosts();
+                        showAlert('工资薪金记录添加成功', 'success');
+                    },
+                    error: function(xhr) {
+                        showAlert('保存失败: ' + xhr.responseText, 'danger');
+                    }
+                });
+            });
+            
+            // 计算分摊
+            $('#calculateAllocation').click(function() {
+                const month = $('#allocationMonth').val();
+                const costType = $('#costType').val();
+                
+                if (!month) {
+                    showAlert('请选择月份', 'danger');
+                    return;
+                }
+                
+                $.ajax({
+                    url: '/api/allocate_fixed_costs',
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        month: month,
+                        cost_type: costType
+                    }),
+                    success: function(response) {
+                        // 显示总固定成本
+                        $('#totalFixedCost').text('¥' + response.total_fixed_cost.toFixed(2));
+                        
+                        // 显示总权重
+                        $('#totalWeight').text(response.total_weight.toFixed(2));
+                        
+                        // 显示分配率
+                        $('#allocationRate').text('¥' + response.allocation_rate.toFixed(2) + '/单位权重');
+                        
+                        // 显示分摊详情
+                        const tbody = $('#allocationDetails');
+                        tbody.empty();
+                        
+                        response.results.forEach(result => {
+                            const row = `
+                                <tr>
+                                    <td>${result.contract_name}</td>
+                                    <td>¥${result.amount.toFixed(2)}</td>
+                                    <td>${result.completion_rate.toFixed(2)}%</td>
+                                    <td>${result.weight.toFixed(2)}</td>
+                                    <td>¥${result.allocated_cost.toFixed(2)}</td>
+                                </tr>
+                            `;
+                            tbody.append(row);
+                        });
+                        
+                        // 显示结果区域
+                        $('#allocationResults').show();
+                        
+                        // 存储计算结果用于确认
+                        $('#confirmAllocation').data('results', response);
+                    },
+                    error: function(xhr) {
+                        const error = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : '计算失败';
+                        showAlert(error, 'danger');
+                    }
+                });
+            });
+            
+            // 确认分摊
+            $('#confirmAllocation').click(function() {
+                // 这里实际上已经在上一步计算时保存了成本记录
+                // 我们只需要提示用户成功即可
+                showAlert('固定成本分摊已完成，已添加到各合同的成本记录中', 'success');
+                
+                // 隐藏结果区域
+                $('#allocationResults').hide();
+            });
+            
+            // 显示提示消息
+            function showAlert(message, type) {
+                // 移除现有的提示框
+                $('.alert-dismissible').remove();
+                
+                // 创建新的提示框
+                const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+                const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+                
+                const alertHtml = `
+                    <div class="alert ${alertClass} alert-dismissible fade show position-fixed" 
+                         style="top: 20px; right: 20px; z-index: 1050; min-width: 300px;" role="alert">
+                        <i class="fas ${icon} me-2"></i>
+                        <strong>${message}</strong>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                `;
+                
+                // 添加到页面
+                $('body').append(alertHtml);
+                
+                // 5秒后自动消失
+                setTimeout(function() {
+                    $('.alert-dismissible').alert('close');
+                }, 5000);
+            }
+            
+            // 初始加载工资薪金记录
+            loadSalaryCosts();
+        });
+    </script>
+</body>
+</html>
