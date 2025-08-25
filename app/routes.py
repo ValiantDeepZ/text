@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 from flask import render_template, request, jsonify, redirect, url_for
 from app import db
-from app.models import Supplier, Client, Contract, Payment, Invoice, Cost, FixedCost  # 添加 FixedCost 导入
+from app.models import Supplier, Client, Contract, Payment, Invoice, Cost, FixedCost, SupplierReconciliation  # 添加 FixedCost 导入
 import os
 from sqlalchemy.orm import joinedload
 from datetime import datetime
+from flask import session,flash
+
 
 
 def init_routes(app):
@@ -42,7 +44,37 @@ def init_routes(app):
             })
         
         return render_template('index.html', contracts=contract_data)
-    
+    @app.route('/login', methods=['GET', 'POST'])
+    def login():
+        if request.method == 'POST':
+            username = request.form.get('username')
+            password = request.form.get('password')
+            
+            # 检查预定义的用户名和密码
+            if username == 'zhangaoqian' and password == 'Sw181112.':
+                session['logged_in'] = True
+                session['username'] = username
+                flash('登录成功！', 'success')
+                return redirect(url_for('index'))
+            else:
+                flash('用户名或密码错误！', 'danger')
+        
+        return render_template('login.html')
+    @app.route('/logout')
+    def logout():
+        session.pop('logged_in', None)
+        session.pop('username', None)
+        flash('您已成功注销！', 'info')
+        return redirect(url_for('login'))
+
+    # 添加一个 before_request 处理程序来检查登录状态
+    @app.before_request
+    def require_login():
+        # 允许访问的无需登录的路由
+        allowed_routes = ['login', 'static']
+        if request.endpoint not in allowed_routes and not session.get('logged_in'):
+            return redirect(url_for('login'))
+
     # 搜索供应商接口
     @app.route('/api/suppliers/search/<string:term>')
     @app.route('/api/suppliers/search/')
@@ -513,6 +545,75 @@ def init_routes(app):
             'allocation_rate': allocation_rate,
             'results': results
         })
+    @app.route('/supplier/<int:supplier_id>/reconciliation')
+    def supplier_reconciliation(supplier_id):
+        supplier = Supplier.query.get_or_404(supplier_id)
+        reconciliations = SupplierReconciliation.query.filter_by(SupplierID=supplier_id).order_by(SupplierReconciliation.TransactionDate).all()
+        
+        # 计算余额
+        balance = 0
+        reconciliation_data = []
+        for recon in reconciliations:
+            balance = recon.get_balance(balance)
+            reconciliation_data.append({
+                'ReconciliationID': recon.ReconciliationID,
+                'TransactionDate': recon.TransactionDate.strftime('%Y-%m-%d') if recon.TransactionDate else '',
+                'PaymentAmount': float(recon.PaymentAmount),
+                'InvoiceAmount': float(recon.InvoiceAmount),
+                'Balance': float(balance),
+                'Description': recon.Description,
+                'CustomField1': recon.CustomField1,
+                'CustomField2': recon.CustomField2,
+                'CustomField3': recon.CustomField3
+            })
+        
+        return render_template('reconciliation.html', 
+                            supplier=supplier, 
+                            reconciliations=reconciliation_data,
+                            balance=balance)
+
+    # 添加对账记录API
+    @app.route('/api/supplier_reconciliation', methods=['POST'])
+    def add_supplier_reconciliation():
+        data = request.json
+        new_reconciliation = SupplierReconciliation(
+            SupplierID=data['SupplierID'],
+            TransactionDate=datetime.strptime(data['TransactionDate'], '%Y-%m-%d').date(),
+            PaymentAmount=data.get('PaymentAmount', 0),
+            InvoiceAmount=data.get('InvoiceAmount', 0),
+            Description=data.get('Description', ''),
+            CustomField1=data.get('CustomField1', ''),
+            CustomField2=data.get('CustomField2', ''),
+            CustomField3=data.get('CustomField3', '')
+        )
+        db.session.add(new_reconciliation)
+        db.session.commit()
+        return jsonify({'message': '对账记录添加成功', 'id': new_reconciliation.ReconciliationID})
+
+    # 删除对账记录API
+    @app.route('/api/supplier_reconciliation/<int:id>', methods=['DELETE'])
+    def delete_supplier_reconciliation(id):
+        reconciliation = SupplierReconciliation.query.get_or_404(id)
+        db.session.delete(reconciliation)
+        db.session.commit()
+        return jsonify({'message': '对账记录删除成功'})
+
+    # 更新对账记录API
+    @app.route('/api/supplier_reconciliation/<int:id>', methods=['PUT'])
+    def update_supplier_reconciliation(id):
+        reconciliation = SupplierReconciliation.query.get_or_404(id)
+        data = request.json
+        
+        reconciliation.TransactionDate = datetime.strptime(data['TransactionDate'], '%Y-%m-%d').date()
+        reconciliation.PaymentAmount = data.get('PaymentAmount', 0)
+        reconciliation.InvoiceAmount = data.get('InvoiceAmount', 0)
+        reconciliation.Description = data.get('Description', '')
+        reconciliation.CustomField1 = data.get('CustomField1', '')
+        reconciliation.CustomField2 = data.get('CustomField2', '')
+        reconciliation.CustomField3 = data.get('CustomField3', '')
+        
+        db.session.commit()
+        return jsonify({'message': '对账记录更新成功'})
     
     # 测试路由
     @app.route('/test')

@@ -111,3 +111,25 @@ class FixedCost(db.Model):
     
     def __repr__(self):
         return f'<FixedCost {self.CostType} {self.Month}>'
+    
+class SupplierReconciliation(db.Model):
+    __tablename__ = 'SupplierReconciliations'
+    ReconciliationID = db.Column(db.Integer, primary_key=True)
+    SupplierID = db.Column(db.Integer, db.ForeignKey('Suppliers.SupplierID'), nullable=False)
+    TransactionDate = db.Column(db.Date, nullable=False)
+    PaymentAmount = db.Column(db.Numeric(18,2), default=0.00)
+    InvoiceAmount = db.Column(db.Numeric(18,2), default=0.00)
+    Description = db.Column(db.String(500))
+    CustomField1 = db.Column(db.String(100))
+    CustomField2 = db.Column(db.String(100))
+    CustomField3 = db.Column(db.String(100))
+    CreatedDate = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # 关系
+    supplier = db.relationship('Supplier', backref='reconciliations')
+    
+    def __repr__(self):
+        return f'<SupplierReconciliation {self.ReconciliationID} for Supplier {self.SupplierID}>'
+    
+    def get_balance(self, previous_balance=0):
+        return previous_balance + self.PaymentAmount - self.InvoiceAmount
